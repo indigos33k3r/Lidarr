@@ -55,7 +55,7 @@ namespace NzbDrone.Core.HealthCheck.Checks
                             }
                             else
                             {
-                                return new HealthCheck(GetType(), HealthCheckResult.Error, $"Download client {client.Definition.Name} places downloads in {folder.FullPath} but Lidarr cannot see this directory.  Check that the user running Lidarr has the necessary permissions.", "#permissions-error");
+                                return new HealthCheck(GetType(), HealthCheckResult.Error, $"Download client {client.Definition.Name} places downloads in {folder.FullPath} but Lidarr cannot see this directory.  You may need to adjust the folder's permissions.", "#permissions-error");
                             }
                         }
                     }
@@ -100,7 +100,7 @@ namespace NzbDrone.Core.HealthCheck.Checks
                 else
                 {
                     // path mappings shouldn't be needed locally so probably a permissions issue
-                    return new HealthCheck(GetType(), HealthCheckResult.Error, $"Download client {client.Definition.Name} reported files in {dlpath} but Lidarr cannot see this directory.  Check the user running Lidarr has the necessary permissions.", "#permissions-error");
+                    return new HealthCheck(GetType(), HealthCheckResult.Error, $"Download client {client.Definition.Name} reported files in {dlpath} but Lidarr cannot see this directory.  You may need to adjust the folder's permissions.", "#permissions-error");
                 }
             }
             else
