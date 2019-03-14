@@ -1,19 +1,24 @@
-using System;
 using System.Linq;
 using NLog;
 using NzbDrone.Core.DecisionEngine;
 using NzbDrone.Core.Parser.Model;
 using NzbDrone.Core.Qualities;
-using NzbDrone.Core.Languages;
+using NzbDrone.Core.DecisionEngine.Specifications;
 
 namespace NzbDrone.Core.MediaFiles.TrackImport.Specifications
 {
     public class AlbumUpgradeSpecification : IImportDecisionEngineSpecification<LocalAlbumRelease>
     {
+        private readonly IMediaFileService _mediaFileService;
+        private readonly UpgradableSpecification _upgradableSpecification;
         private readonly Logger _logger;
 
-        public AlbumUpgradeSpecification(Logger logger)
+        public AlbumUpgradeSpecification(UpgradableSpecification qualityUpgradableSpecification,
+                                         IMediaFileService mediaFileService,
+                                         Logger logger)
         {
+            _upgradableSpecification = qualityUpgradableSpecification;
+            _mediaFileService = mediaFileService;
             _logger = logger;
         }
 
@@ -29,21 +34,19 @@ namespace NzbDrone.Core.MediaFiles.TrackImport.Specifications
             // if we are, check we are upgrading
             if (newRelease.Id != currentRelease.Id)
             {
+                var trackFiles = _mediaFileService.GetFilesByAlbum(localAlbumRelease.AlbumRelease.AlbumId);
+                var currentQualities = trackFiles.Select(c => c.Quality).ToList();
+
                 // min quality of all new tracks
                 var newMinQuality = localAlbumRelease.LocalTracks.Select(x => x.Quality).OrderBy(x => x, qualityComparer).First();
                 _logger.Debug("Min quality of new files: {0}", newMinQuality);
-                
-                // get minimum quality of existing release
-                var existingQualities = currentRelease.Tracks.Value.Where(x => x.TrackFileId != 0).Select(x => x.TrackFile.Value.Quality);
-                if (existingQualities.Any())
+
+                if (!_upgradableSpecification.IsQualityUpgradable(artist.QualityProfile,
+                                                                  currentQualities,
+                                                                  newMinQuality))
                 {
-                    var existingMinQuality = existingQualities.OrderBy(x => x, qualityComparer).First();
-                    _logger.Debug("Min quality of existing files: {0}", existingMinQuality);
-                    if (qualityComparer.Compare(existingMinQuality, newMinQuality) > 0)
-                    {
-                        _logger.Debug("This album isn't a quality upgrade for all tracks. Skipping {0}", localAlbumRelease);
-                        return Decision.Reject("Not an upgrade for existing album file(s)");
-                    }
+                    _logger.Debug("This album isn't a quality upgrade. Skipping {0}", localAlbumRelease);
+                    return Decision.Reject("Not an upgrade for existing album file(s)");
                 }
             }
 

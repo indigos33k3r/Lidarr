@@ -48,8 +48,8 @@ namespace NzbDrone.Core.DecisionEngine.Specifications
 
                 if (!tracksMissing && trackFiles.Any())
                 {
-                    var currentQualities = trackFiles.Select(c => c.Quality).Distinct().ToList();
-                    var currentLanguages = trackFiles.Select(c => c.Language).Distinct().ToList();
+                    var currentQualities = trackFiles.Select(c => c.Quality).ToList();
+                    var currentLanguages = trackFiles.Select(c => c.Language).ToList();
 
                     if (!_upgradableSpecification.IsUpgradable(subject.Artist.QualityProfile,
                                                                subject.Artist.LanguageProfile,

@@ -19,5 +19,7 @@ namespace NzbDrone.Core.Profiles.Qualities
         {
             return DataMapper.Query<QualityProfile>().Where(p => p.Id == id).GetRowCount() == 1;
         }
+
+        protected override bool PublishModelEvents => true;
     }
 }

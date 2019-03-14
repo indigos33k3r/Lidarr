@@ -49,8 +49,8 @@ namespace NzbDrone.Core.DecisionEngine.Specifications
                 if (!tracksMissing && trackFiles.Any())
                 {
                     // Get a distinct list of all current track qualities and languages for a given album
-                    var currentQualities = trackFiles.Select(c => c.Quality).Distinct().ToList();
-                    var currentLanguages = trackFiles.Select(c => c.Language).Distinct().ToList();
+                    var currentQualities = trackFiles.Select(c => c.Quality).ToList();
+                    var currentLanguages = trackFiles.Select(c => c.Language).ToList();
 
                     _logger.Debug("Comparing file quality and language with report. Existing files contain {0} : {1}", currentQualities, currentLanguages);
 

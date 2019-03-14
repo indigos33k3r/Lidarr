@@ -158,11 +158,23 @@ namespace NzbDrone.Core.Test.DecisionEngineTests
         }
 
         [Test]
-        public void should_be_false_if_some_tracks_are_upgradable_and_some_are_downgrades()
+        public void should_be_false_if_some_tracks_are_upgradable_and_some_are_downgrades_but_average_worse()
         {
-            WithFirstFileUpgradable();
-            _parseResultSingle.ParsedAlbumInfo.Quality = new QualityModel(Quality.MP3_320);
+            _firstFile.Quality = new QualityModel(Quality.MP3_192);
+            _secondFile.Quality = new QualityModel(Quality.FLAC);
+
+            _parseResultSingle.ParsedAlbumInfo.Quality = new QualityModel(Quality.MP3_VBR);
             Subject.IsSatisfiedBy(_parseResultSingle, null).Accepted.Should().BeFalse();
+        }
+
+        [Test]
+        public void should_be_true_if_some_tracks_are_upgradable_and_some_are_downgrades_but_average_better()
+        {
+            _firstFile.Quality = new QualityModel(Quality.MP3_192);
+            _secondFile.Quality = new QualityModel(Quality.FLAC);
+
+            _parseResultSingle.ParsedAlbumInfo.Quality = new QualityModel(Quality.MP3_320);
+            Subject.IsSatisfiedBy(_parseResultSingle, null).Accepted.Should().BeTrue();
         }
     }
 }

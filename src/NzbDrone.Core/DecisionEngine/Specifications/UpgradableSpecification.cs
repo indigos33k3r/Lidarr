@@ -1,9 +1,16 @@
 using NLog;
+using NzbDrone.Common.Cache;
+using NzbDrone.Common.Extensions;
+using NzbDrone.Common.Serializer;
+using NzbDrone.Core.Datastore.Events;
 using NzbDrone.Core.Languages;
+using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Profiles.Languages;
 using NzbDrone.Core.Profiles.Qualities;
 using NzbDrone.Core.Qualities;
+using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace NzbDrone.Core.DecisionEngine.Specifications
 {
@@ -11,6 +18,7 @@ namespace NzbDrone.Core.DecisionEngine.Specifications
     {
         bool IsUpgradable(QualityProfile profile, LanguageProfile languageProfile, List<QualityModel> currentQualities, List<Language> currentLanguages, int currentScore, QualityModel newQuality, Language newLanguage, int newScore);
         bool IsUpgradable(QualityProfile profile, LanguageProfile languageProfile, QualityModel currentQuality, Language currentLanguage, int currentScore, QualityModel newQuality, Language newLanguage, int newScore);
+        bool IsQualityUpgradable(QualityProfile profile, List<QualityModel> currentQualities, QualityModel newQuality = null);
         bool QualityCutoffNotMet(QualityProfile profile, QualityModel currentQuality, QualityModel newQuality = null);
         bool LanguageCutoffNotMet(LanguageProfile languageProfile, Language currentLanguage);
         bool CutoffNotMet(QualityProfile profile, LanguageProfile languageProfile, List<QualityModel> currentQualities, List<Language> currentLanguages, int currentScore, QualityModel newQuality = null, int newScore = 0);
@@ -20,13 +28,17 @@ namespace NzbDrone.Core.DecisionEngine.Specifications
         bool IsUpgradeAllowed(QualityProfile qualityProfile, LanguageProfile languageProfile, QualityModel currentQuality, Language currentLanguage, QualityModel newQuality, Language newLanguage);
     }
 
-    public class UpgradableSpecification : IUpgradableSpecification
+    public class UpgradableSpecification : IUpgradableSpecification,
+        IHandle<ModelEvent<QualityProfile>>
     {
         private readonly Logger _logger;
+        private readonly ICached<Dictionary<int, double>> _qualityScoreCache;
 
-        public UpgradableSpecification(Logger logger)
+        public UpgradableSpecification(Logger logger,
+                                       ICacheManager cacheManager)
         {
             _logger = logger;
+            _qualityScoreCache = cacheManager.GetCache<Dictionary<int, double>>(GetType());
         }
 
         private bool IsLanguageUpgradable(LanguageProfile profile, List<Language> currentLanguages, Language newLanguage = null) 
@@ -57,27 +69,40 @@ namespace NzbDrone.Core.DecisionEngine.Specifications
             return true;
         }
 
-        private bool IsQualityUpgradable(QualityProfile profile, List<QualityModel> currentQualities, QualityModel newQuality = null)
+        private Dictionary<int, double> QualityScores(QualityProfile profile)
+        {
+            // use 1 based indices so max score is one
+            var maxIndex = (double) profile.GetIndex(profile.LastAllowedQuality()).Index + 1;
+            var result = Quality.All.ToDictionary(x => x.Id, x => (profile.GetIndex(x, true).Index + 1) / maxIndex);
+            
+            return result;
+        }
+
+        private double AggregateQualityScore(QualityProfile profile, IEnumerable<QualityModel> qualities)
+        {
+            var qualityScores = _qualityScoreCache.Get(profile.Id.ToString(), () => QualityScores(profile), TimeSpan.FromSeconds(30));
+
+            double result = 0;
+            double count = 0;
+            foreach (var quality in qualities)
+            {
+                result += qualityScores[quality.Quality.Id];
+                count += 1;
+            }
+            
+            return result / count;
+        }
+
+        public bool IsQualityUpgradable(QualityProfile profile, List<QualityModel> currentQualities, QualityModel newQuality = null)
         {
             if (newQuality != null)
             {
-                var totalCompare = 0;
-
-                foreach (var quality in currentQualities)
+                var currentScore = AggregateQualityScore(profile, currentQualities);
+                var newScore = AggregateQualityScore(profile, new List<QualityModel> { newQuality });
+                
+                _logger.Debug($"Current quality score {currentScore:0.000} vs new quality score {newScore:0.000}");
+                if (currentScore >= newScore)
                 {
-                    var compare = new QualityModelComparer(profile).Compare(newQuality, quality);
-
-                    totalCompare += compare;
-
-                    if (compare < 0)
-                    {
-                        // Not upgradable if new quality is a downgrade for any current quality
-                        return false;
-                    }
-                }
-
-                // Not upgradable if new quality is equal to all current qualities
-                if (totalCompare == 0) {
                     return false;
                 }
             }
@@ -292,6 +317,11 @@ namespace NzbDrone.Core.DecisionEngine.Specifications
             }
 
             return true;
+        }
+        
+        public void Handle(ModelEvent<QualityProfile> message)
+        {
+            _qualityScoreCache.Clear();
         }
     }
 }
